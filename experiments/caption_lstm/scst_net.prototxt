@@ -2,10 +2,10 @@ name: "caption_lstm"
 layer {
   name: "train_data"
   type: "Python"
-  top: "image_id"
-  top: "num_boxes"
-  top: "boxes"
-  top: "features"
+  top: "image_id"  # 12 x 3 :(image_id, image_h, image_w)
+  top: "num_boxes" # 12 x 1
+  top: "boxes"   # no use
+  top: "features"   # 12 x 101 x 2048 x 1
   python_param {
     module: "rcnn_layers"
     layer: "RCNNTestDataLayer"
@@ -16,8 +16,8 @@ layer {
   name: "feature_slice_layer"
   type: "Slice"
   bottom: "features"
-  top: "avg_pool"
-  top: "spatial_features"
+  top: "avg_pool"     # 12 x 1 x 2048 x 1
+  top: "spatial_features" # 12 x 100 x 2048 x 1
   slice_param {
     slice_dim: 1
     slice_point: 1
@@ -27,7 +27,7 @@ layer {
   name: "context"
   type: "Flatten"
   bottom: "avg_pool"
-  top: "context"
+  top: "context"  # 12 x (1 x 2048 x 1) = 12 x 2048
   flatten_param {
     axis: 1
   }
@@ -36,7 +36,7 @@ layer {
   name: "fc"
   type: "InnerProduct"
   bottom: "spatial_features"
-  top: "fc"
+  top: "fc" # 12 x 100 x 512 x 1
   inner_product_param {
     num_output: 512
     bias_term: false
@@ -51,7 +51,7 @@ layer {
   name: "tile_context"
   type: "Tile"
   bottom: "context"
-  top: "tile_context"
+  top: "tile_context"  # 12 x (5 x 2048)
   tile_param {
     axis: 1
     tiles: 5
@@ -61,7 +61,7 @@ layer {
   name: "beam_context"
   type: "Reshape"
   bottom: "tile_context"
-  top: "beam_context"
+  top: "beam_context"  # (12 x 5) x 2048 = 60 x 2048
   reshape_param {
     shape {
       dim: -1
@@ -73,7 +73,7 @@ layer {
   name: "tile_spatial_features"
   type: "Tile"
   bottom: "spatial_features"
-  top: "tile_spatial_features"
+  top: "tile_spatial_features" # 12 x (5 x 100) x 2048 x 1
   tile_param {
     axis: 1
     tiles: 5
@@ -83,7 +83,7 @@ layer {
   name: "beam_spatial_features"
   type: "Reshape"
   bottom: "tile_spatial_features"
-  top: "beam_spatial_features"
+  top: "beam_spatial_features" # (12 x 5) x 100 x 2048 = 60 x 100 x 2048
   reshape_param {
     shape {
       dim: -1
@@ -96,7 +96,7 @@ layer {
   name: "tile_fc"
   type: "Tile"
   bottom: "fc"
-  top: "tile_fc"
+  top: "tile_fc"  # 12 x (5 x 100) x 512 x 1
   tile_param {
     axis: 1
     tiles: 5
@@ -106,7 +106,7 @@ layer {
   name: "beam_fc"
   type: "Reshape"
   bottom: "tile_fc"
-  top: "beam_fc"
+  top: "beam_fc" # (12 x 5) x 100 x 512 = 60 x 100 x 512
   reshape_param {
     shape {
       dim: -1
@@ -119,7 +119,7 @@ layer {
   name: "tile_num_boxes"
   type: "Tile"
   bottom: "num_boxes"
-  top: "tile_num_boxes"
+  top: "tile_num_boxes"  # 12 x (5 x 1) = 12 x 5
   tile_param {
     axis: 1
     tiles: 5
@@ -129,7 +129,7 @@ layer {
   name: "beam_num_boxes"
   type: "Reshape"
   bottom: "tile_num_boxes"
-  top: "beam_num_boxes"
+  top: "beam_num_boxes" # 60 x 1
   reshape_param {
     shape {
       dim: -1
@@ -140,11 +140,11 @@ layer {
 layer {
   name: "beam"
   type: "BeamSearch"
-  bottom: "num_boxes"
-  bottom: "spatial_features"
-  bottom: "fc"
-  bottom: "context"
-  top: "caption"
+  bottom: "num_boxes" # 12 x 1
+  bottom: "spatial_features" # 12 x 100 x 2048 x 1
+  bottom: "fc" # 12 x 100 x 512 x 1
+  bottom: "context" # 12 x 2048
+  top: "caption" # sequences (batch_size, num_stratas, beam_size, sequence_length) eq. 12 x 1 x 5 x 20
   top: "log_prob"
   top: "log_prob_sequence"
   param {
@@ -612,11 +612,14 @@ layer {
   bottom: "log_prob"
   bottom: "log_prob_sequence"
 }
+
+
+# here
 layer {
   name: "scst"
   type: "Python"
-  bottom: "image_id"
-  bottom: "caption"
+  bottom: "image_id" # 12 x 3 :(image_id, image_h, image_w)
+  bottom: "caption" # 12 x 1 x 5 x 20
   top: "score_weights"
   top: "input_sentence"
   top: "target_sentence"
@@ -629,6 +632,8 @@ layer {
     param_str: "{\'end_of_sequence\': 0, \'ignore_label\': 1, \'gt_caption_paths\': [\'data/coco/captions_train2014.json\', \'data/coco/captions_val2014.json\'], \'vocab_path\': \'data/coco_splits/train_vocab.txt\'}"
   }
 }
+
+
 layer {
   name: "input_slice"
   type: "Slice"
